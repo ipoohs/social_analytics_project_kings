@@ -1,0 +1,280 @@
+---
+title: "Trump VS. Biden exploratory analysis on Twitter"
+date: "12/27/2021"
+output:
+  word_document: default
+  '': default
+---
+Introduction
+
+Digital analytics with computational methods might be able to do exploratory analysis on US election with social media datasets, which could be measured and processed automatically with computers (McGillivray et al., 2020) to analyse data that may be related to the result of the election. Twitter, one of the popular social network platforms, is likely to be an area for expressing political ideas and opinions for anyone willing to post their thought to this platform (Chaudhry et al., 2021). This project will use the dataset from Kaggle created by Manch Hui, containing 1,727,000 tweets worldwide with hashtags including the name “Donald Trump” (#donaldtrump) and “Joe Biden” (#joebiden). This dataset contains tweets in such hashtags from October 15, 2020, to November 8, 2020. Post-hoc analysis like this project might be essential Joe Biden is the winner of this event, but looking backward to analyse the datasets would be worthwhile to see the most appropriate tool for Social Analytics studies in the future. Also, this project would focus on the pre-election phase (October 15, 2020, to November 2, 2020), which seems to be the most significant phase for deciding to vote in this election.
+
+Methods used in this study
+
+The methods which will be used to pursue the goal of this project are exploiting the Natural Language Processing (NLP), topic modeling, and sentimental analysis. Firstly, the frequency of tweets related to the candidate will be calculated, allowing to acknowledge the overview of the dataset before diving deeper into the topic modeling and sentimental analysis. After that, topic modeling with LDA model and sentimental analysis will analyse datasets, visualising them in a more accessible way to interpret the overall expression of Twitter users for US presidential candidates. 
+
+Data Preparation
+
+Datasets in this study have two files: tweets with hashtags named Donald Trump and Joe Biden. To extract only English tweets, this project will apply cld3 or “Google’s Compact Language Detector 3” (Ooms, 2021, p.1) package. Another process is exluding all of other locations except USA.
+
+
+```{r}
+trump = read.csv("C:/Users/Fuangrit Srinual/Desktop/projectR/hashtag_donaldtrump.csv", header= T)
+biden = read.csv("C:/Users/Fuangrit Srinual/Desktop/projectR/hashtag_joebiden.csv", header= T)
+library(cld3)
+trump$language = detect_language(trump$tweet)
+trump_en = trump[trump$language=="en",]
+biden$language = detect_language(biden$tweet)
+biden_en = biden[biden$language=="en",]
+trump_USA = trump_en[trump_en$country=="United States of America",]
+biden_USA = biden_en[biden_en$country=="United States of America",]
+```
+
+In order to get the tweets from only the date before US election, using package ‘Lubridate’ which is very useful for working with date like this study (Spinu et al., 2021). 
+
+```{r}
+trump_USA$date = as.Date(trump_USA$created_at)
+biden_USA$date = as.Date(biden_USA$created_at)
+library(lubridate)
+date_before = mdy( c("10-15-2020" , "10-16-2020",  "10-17-2020",  "10-18-2020" , "10-19-2020", "10-20-2020", "10-21-2020", "10-22-2020", "10-23-2020", "10-24-2020", "10-25-2020", "10-26-2020", "10-27-2020", "10-28-2020", "10-29-2020", "10-30-2020", "10-31-2020", "11-01-2020" , "11-02-2020"))
+trump_before = trump_USA[trump_USA$date %in% date_before, ]
+biden_before = biden_USA[biden_USA$date %in% date_before, ]
+```
+
+Data cleaning
+
+I will create function for cleaning data for shorter line of codes. This step would apply text mining package, which is absolutely siginificant in Natural Language Processing (NLP) like this step (Feinerer, 2020). Turning to the corpus will be useful for my analysis in the following process as well, due to its functions that support for hypothesising statistically test in quantitative data (McGillivray et al., 2018), like these datasets.
+
+```{r}
+library(tm)
+data_cleaning <- function(c) {
+  c <- Corpus(VectorSource(c$tweet))                 
+  c <- tm_map(c, content_transformer(tolower))
+  c <- tm_map(c, removeNumbers)
+  c <- tm_map(c, removePunctuation)
+  c <- tm_map(c, stemDocument)
+    removeURL <- function(x) gsub('http[[:alnum:]]*','', x)
+  c<- tm_map(c, content_transformer(removeURL))
+  c <- tm_map(c, stripWhitespace)
+  c <- tm_map(c, content_transformer(function(s)
+  {
+    gsub(pattern = '[^a-zA-Z0-9\\s]+',
+    x = s,
+    replacement = " " ,
+     ignore.case = TRUE,
+    perl = TRUE)
+  } ))
+    removeNonAscii <- function(x) textclean::replace_non_ascii(x)
+  c<- tm_map(c, content_transformer(removeNonAscii))
+  c <- tm_map(c, removeWords, c('biden','joe', 'bidens' , 'joebiden','trump','donald', 'trumps' , 'donaldtrump','will', 'can', 'just', 'like','want', 'think', 'see', 'going', stopwords('english')))
+  return(c)
+  }
+```
+
+Now, I got function for cleaning my datasets, then I used to clean my datasets.
+
+```{r}
+trump_before_cleancorpus <- data_cleaning(trump_before)
+biden_before_cleancorpus <- data_cleaning(biden_before)
+```
+
+I will firstly, create wordcloud visualisation for acknowledging overview from tweets with #donaldtrump
+
+```{r}
+library(wordcloud)
+set.seed(1234)
+palet  = brewer.pal(8, 'Dark2')
+wordcloud(trump_before_cleancorpus, min.freq = 1500, scale = c(4.5, 0.3) , random.order = F, col = palet)
+```
+
+And from #joebiden
+
+```{r}
+set.seed(1234)
+palet  = brewer.pal(8, 'Dark2')
+wordcloud(biden_before_cleancorpus, min.freq = 1500, scale = c(4.5, 0.4) , random.order = F, col = palet)
+```
+In order to continue my exploratory analysis in this study, I have to convert corpus to Document Term Matrix which means Row will be Document (tweets) and column will be terms (Feinerer, 2020). Nonetheless, this process might be memory-consuming due to the amount of tweets in corpus. As a result, I sampled each corpus to 10,000 elements with the function ‘sample’.
+
+```{r}
+sample_trump_before <- sample(trump_before_cleancorpus, size = 10000)
+sample_biden_before <- sample(biden_before_cleancorpus, size = 10000)
+```
+
+After sampling datasets, I can now convert them into Document Term Matrix with the considerable size for my computers.
+
+```{r}
+trump_before_dtm <- DocumentTermMatrix(sample_trump_before)
+doc.length = apply(trump_before_dtm, 1, sum)
+trump_before_frequency = colSums(as.matrix(trump_before_dtm))
+trump_before_dtm = trump_before_dtm[doc.length > 0,]
+trump_before_dtm
+```
+
+It can be seen that the number of documents for Trump_dtm is 9,995, and the summary above showed that terms in this matrix are 18,510, meaning that it is containing 18,510 specific words in this datasets (Hossain, 2018).
+
+Then, I will find the association between the top five words with another terms.
+
+```{r}
+trump_before_order = order(trump_before_frequency, decreasing = TRUE)
+trump_before_frequency[head(trump_before_order, n = 5)]
+findAssocs(trump_before_dtm, "vote",0.2)
+findAssocs(trump_before_dtm, 'amp', 0.2)
+findAssocs(trump_before_dtm, 'covid', 0.2)
+findAssocs(trump_before_dtm, 'elect', 0.2)
+findAssocs(trump_before_dtm, 'realdonaldtrump', 0.2)
+```
+
+There are only two words that have association with other words. The word ‘amp’ might be the short form of ‘amplifier’ or ‘American President’, also it linked to the two significant words which are ‘racehorsetheori’ and ‘eugen’. These two words may come from Trump’s speech on September 18, 2020 at Minnesota (Boroff, 2020). This seems to be connected to the Covid-19 pandemic as Trump may use this term to say that people with good blood might be strong and survive from Covid-19 like good race horse, which might link to the word ‘covid.’
+Moving on to the Biden hash tags.
+
+```{r}
+biden_before_dtm <- DocumentTermMatrix(sample_biden_before)
+doc.length = apply(biden_before_dtm, 1, sum)
+biden_before_dtm = biden_before_dtm[doc.length > 0,]
+biden_before_frequency = colSums(as.matrix(biden_before_dtm))
+biden_before_dtm
+```
+
+It is clear that this matrix are containing 10,000 tweets and 16,990 unique words.
+
+Then, I will analyse the associations of the top five words.
+
+```{r}
+biden_before_order = order(biden_before_frequency, decreasing = TRUE)
+biden_before_frequency[head(biden_before_order, n = 5)]
+findAssocs(biden_before_dtm, "vote",0.2)
+findAssocs(biden_before_dtm, 'amp', 0.2)
+findAssocs(biden_before_dtm, 'elect', 0.2)
+findAssocs(biden_before_dtm, 'get', 0.2)
+findAssocs(biden_before_dtm, 'presid', 0.2)
+```
+
+The words ‘vote’ and ‘amp’ have linked to the other association which is likely to be the same topic due to ‘vote’ are associated with ‘earli’ and ‘amp’ are linked with ‘voteinperson’ or ‘await’. From the results, Twitter users might talk about the voting procedure that voter can choose to vote in-person or by absentee or vote in-person before the actual election day.
+
+I will visualise them into plots by setting a minimum of word at 350 times in #donaldtrump.
+
+```{r}
+library(ggplot2)
+trump_before_plot = data.frame(words = names(trump_before_frequency), count = trump_before_frequency)
+trump_before_plot = subset(trump_before_plot, trump_before_plot$count > 350) 
+ggplot(data = trump_before_plot, aes(words, count)) + geom_bar(stat = 'identity') + ggtitle('Number of words using more than 350 times in Trump mentioned tweet')+coord_flip()
+```
+
+Through the visualisation, the words 'vote', 'elect' and 'amp' are the top three word usage on Trump hash tags tweets. 
+
+And I will plot the graph of Biden hash tags with the same setting as Trump.
+
+```{r}
+biden_before_plot = data.frame(words = names(biden_before_frequency), count = biden_before_frequency)
+biden_before_plot = subset(biden_before_plot, biden_before_plot$count > 350) 
+ggplot(data = biden_before_plot, aes(words, count)) + geom_bar(stat = 'identity') + ggtitle('Number of words using more than 350 times in Biden mentioned tweets')+coord_flip()
+```
+
+The top three words is the same as Trump but the amount of this graph is higher than Trump's visualisation. For example, the word 'vote' in #joebiden was used over 3,000 times while #donaldtrump was posted just around 2,000 times.
+ 
+Topic Modeling
+
+The second main method is topic modeling. The particular method for topic modeling process in this study is LDA (Latent Dirichlet allocation) which will interpret a document in terms of a group of topic and a topic in terms of a chunk of words, allowing the process of overlapping through many documents to see the intersection of topic inside the matrix (Hou, 2017).
+
+However, if using this model to distribute document into inappropriate number of topics might lead to confusion between them (Hossain, 2018). Experiment to search for the most suitable K number is vital for searching the most suitable number of topics for LDA. Yet this project cannot be done with experiment like that due to the word limit. Therefore, I will use K number equal two to execute this model because it might be suitable for these datasets which contain two side of presidential candidate.
+
+
+```{r}
+library(topicmodels)
+library(topicdoc)
+trump_before_lda = LDA(trump_before_dtm, k = 2, method = 'Gibbs', 
+          control = list(nstart = 5, seed = list(1505,99,36,56,88), best = TRUE, 
+                         thin = 500, burnin = 4000, iter = 2000))
+data.frame(terms(trump_before_lda, 10))
+```
+
+First topic from #Trump might be posting about election which related to the words ‘vote’, ‘elect’ ‘presid’ and ‘american’. On the other hand, second topic might illustrate the expression about their feeling about Trump such as ‘covid’, ‘debat’, ‘lie’ and ‘because’.
+
+And applying LDA model to analyse topics in Biden hash tags dataset.
+
+```{r}
+biden_before_lda = LDA(biden_before_dtm, k = 2, method = 'Gibbs', 
+          control = list(nstart = 5, seed = list(1505,99,36,56,88), best = TRUE, 
+                         thin = 500, burnin = 4000, iter = 2000))
+data.frame(terms(biden_before_lda, 10))
+```
+
+First topic from #Biden hash tags is likely to be involved with the current situation at that time. and the second topic might be written as an aspiration for Biden to win the presidency of US such as 'vote', 'presid', 'bidenharri', 'need' and 'win'. 
+
+Sentiment analysis
+
+For the sentimental analysis, there are several types of resource to be fundamental measurement for the sentiment of words (Modi & Dommeti, 2021). The sentimental analysis in this project is come from ‘NRC’ lexicon (Hossain, 2018), which contains eight types of expression from word usage.
+
+```{r}
+library(textdata)
+library(tidytext)
+library(dplyr)
+```
+
+I will analyse by matching words in data frames with NRC lexicon, calculating to the ratio and converting to the percentage. 
+
+```{r}
+trump_token = data.frame(text=trump_before$tweet, stringsAsFactors = FALSE) %>% unnest_tokens(word, text)
+trump_senti = inner_join(trump_token, get_sentiments("nrc")) %>%
+  dplyr::count(sentiment)
+trump_senti$percent = (trump_senti$n/sum(trump_senti$n))*100
+trump_senti_plot <- ggplot(trump_senti, aes(sentiment, percent)) +   
+        geom_bar(aes(fill = sentiment), position = 'dodge', stat = 'identity')+ 
+  coord_flip() +
+        theme(legend.position = 'none', plot.title = element_text(size=18, face = 'bold'),
+              axis.text=element_text(size=16),
+              axis.title=element_text(size=14,face="bold"))
+biden_token = data.frame(text=biden_before$tweet, stringsAsFactors = FALSE) %>% unnest_tokens(word, text)
+biden_senti = inner_join(biden_token, get_sentiments("nrc")) %>%
+  count(sentiment)
+biden_senti$percent = (biden_senti$n/sum(biden_senti$n))*100
+biden_senti_plot <- ggplot(biden_senti, aes(sentiment, percent)) +   
+        geom_bar(aes(fill = sentiment), position = 'dodge', stat = 'identity')+
+  coord_flip() +
+        theme(legend.position = 'none', plot.title = element_text(size=18),
+              axis.text=element_text(size=16),
+              axis.title=element_text(size=14,face="bold"))
+library(ggpubr)
+ggarrange(trump_senti_plot, biden_senti_plot, 
+          labels = c("#Trump", "#Biden"),
+          ncol = 2, nrow = 1)
+```
+
+Tweets with hash tags Biden has larger number of positive score than negative score, and trust score is the following rank in the Biden plot. Trump hash tags, on the other hand, has negative score more substantial than positive score. 
+
+Conclusion
+
+In summary, this project has revealed that exploratory analysis on this dataset has many result that related to the result of US election 2020 which is Joe Biden is the winner of such event. Topic modeling with LDA model was executed with the topic number of two which revealed that Trump hash tags have been related to the topics of election and their negative feeling about Trump. On the other hand, Biden has been referred to the topics of current situation at that time before election day and positive opinion. Finding association from word frequency has revealed the similar path of topic modeling. Trump has been talked about his final debate in the negative way, but Biden has been tagged with the neutral word like vote in-person.Furthermore, sentimental analysis with NRC lexicon in the visualisation part illustrated the evidence that Trump got the negative score much higher than positive score, whilst Biden has tagged in the tweets containg positive words more than negative words, and also trust score is the third rank for Biden.
+
+From all of these analyses, finding association, topic modeling and sentimental analysis with NRC lexicon might be suitable and accurate to the result hat Biden is the winner of this event. This not mean that these three methods will be correct and could predict the election outcome all the time, yet this project just test several digital analytics methods for datasets from political tweets like this.
+
+However, this project has lacked of an experiment to search for the most suitable K number in topic modeling and sampling corpus before converting to matrix might lead to inaccurate outcome. 
+
+
+Bibliography
+
+Hossain, A. (2018). Text analysis on the tweets about Bangladesh. RPubs. Retreived December 16, 2021, from
+https://rpubs.com/arafath/twitter_analysis
+
+Ooms, J. (2021). Google’s Compact Language Detector 3. The Comprehensive R Archive Network. Retreived December 15, 2021, from https://cran.r-project.org/web/packages/cld3/cld3.pdf
+
+McGillivray, Barbara et al. (2020). The challenges and prospects of the intersection of humanities and data science. The Alan Turing Institute. Retrieved December 10, 2021, from dx.doi.org/10.6084/m9.figshare.12732164
+
+McGillivray, B., Colavizza, G., & Blanke, T. (2018). Towards a Quantitative Research Framework for Historical Disciplines. In: Piotrowski, M. (ed), COMHUM 2018: Book of Abstracts for the Workshop on Computational Methods in the Humanities 2018 (pp.29-31). Lausanne: Université de Lausanne.
+
+Chaudhry, H., N., Javed, Y., Kulsoom, F., Mehmood, Z., Khan, Z., I., Shoaib, U. & Janjua, S., H. (2021). Sentiment Analysis of before and after Elections: Twitter Data of U.S. Election 2020. Electronics 2021, 10(2082), 1-26. Doi.org/10.3390/electronics10172082
+
+Modi, S. & Dommeti, S. (2021). Twitter sentiment analysis in R. Spring 2021 EDAV Community Contributions. Retreived December 15, 2021, from https://jtr13.github.io/cc21/twitter-sentiment-analysis-in-r.html#sentiment-analysis-1
+
+Feinerer, I. (2020). Introduction to the tm Package Text Mining in R. The Comprehensive R Archive Network. Retreived December 12, 2021, from https://cran.r-project.org/web/packages/tm/vignettes/tm.pdf
+
+Burns, A. & Martin, J. (2020). In Calmer Debate, Biden and Trump Offer Sharply Different Visions for Nation. The New York Times. Retreived December 20, 2021, from https://www.nytimes.com/2020/10/22/us/politics/debate-presidential-recap.html
+
+Boroff, D. (2020). UGLY TALK: What is the ‘racehorse theory’ and has Trump endorsed it?. The U.S. Sun. Retreived December 17, 2021, from https://www.the-sun.com/news/1585224/racehorse-theory-president-trump-eugenics-nazis-minnesota
+
+Spinu, V, Grolemund, G., Wickham, H., Vaughan, D., Lyttle, I., Costigan, I., Law J., Mitarotonda, D., Larmarange, J., Boiser J. & Lee, C., H. (2021). Make Dealing with Dates a Little Easier. The Comprehensive R Archive Network. Retreived December 13, 2021, from https://cran.r-project.org/web/packages/lubridate/lubridate.pdf
+
+Hou, J. (2017). Topic modeling of Tweets by LDA. Rstudio Pubs. Retreived December 15, 2021, from https://rstudio-pubs-static.s3.amazonaws.com/286190_fbd48f12527e41ecaf45437beec599df.html
+
+
